@@ -2,61 +2,7 @@ from ast import operator
 import re
 
 
-class Instruction():
-    def __init__(self):
-        self.operator = {}
-        self.operands = []
-        self.prefix = []
-        
-        self.rex = 0        
-        self.rex_w = 0b0
-        self.rex_r = 0b0
-        self.rex_x = 0b0
-        self.rex_b = 0b0
-
-        self.opcode = 0b000000
-        self.d = 0b0
-        self.w = 0b0
-        
-        self.addrMod = 0
-        self.mod = 0b00
-        self.reg = 0b000
-        self.rm = 0b000
-        
-        self.sib = 0
-        self.scale = 0b00
-        self.index = 0b000
-        self.base = 0b000
-
-        self.disp = 0
-
-        self.data = 0
-
-    
-class Assembler:
-    def __init__(self):
-        pass
-    
-    def process(self):
-        nasm = input()
-        self.nasm = re.split(',| ',nasm)
-    
-        self.instructions = Instruction()
-        self.instructions.operator = self.get_operator() 
-
-
-
-
-
-    def get_operator(self):
-        opt = self.nasm[0]
-        for opterator in operators:
-            if opt == opterator['name']:
-                return opterator
-        
-
-
-registers = [
+registers = [ 
     {'name':'rax','size':64,'code':0b000},
     {'name':'rbx','size':64,'code':0b011},
     {'name':'rcx','size':64,'code':0b001},
@@ -162,9 +108,126 @@ operators = [
         ]
 
 
+
+
+class Instruction():
+    def __init__(self):
+        self.operator = {}
+        self.operands = []
+
+        self.prefix = []
+        
+        self.rex = 0        
+        self.rex_w = 0b0
+        self.rex_r = 0b0
+        self.rex_x = 0b0
+        self.rex_b = 0b0
+
+        self.opcode = 0b000000
+        self.d = 0b0
+        self.w = 0b0
+        
+        self.addrMod = 0
+        self.mod = 0b00
+        self.reg = 0b000
+        self.rm = 0b000
+        
+        self.sib = 0
+        self.scale = 0b00
+        self.index = 0b000
+        self.base = 0b000
+
+        self.disp = 0
+
+        self.data = 0
+
+    
+class Assembler:
+    def __init__(self):
+        pass
+    
+    def process(self,nasm):
+        self.nasm = re.split(',| ',nasm)
+    
+        self.instructions = Instruction()
+        self.instructions.operator = self.get_operator() 
+        self.instructions.operands = self.get_operands()
+
+        print(self.instructions.operands)
+
+
+
+    def get_operator(self):
+        opt = self.nasm[0]
+        for opterator in operators:
+            if opt == opterator['name']:
+                return opterator
+    def get_operands(self):
+        operands = []
+        for operand in self.nasm[1:]:
+            if operand[0] == '[' and operand[-1] == ']':
+                memory = True
+            else:
+                memory = False
+            
+
+            if memory:
+                operand_splited = operand[1:-1].split('+')
+                base = {}
+                index = {}
+                scale = 0b00
+                disp = 0
+                for op in operand_splited:
+                    if self.check_constant(op):
+                        disp += int(op)
+                    else:
+                        if self.get_register(op) != {}:
+                            if base:
+                                index = self.get_register(op)
+                            else:
+                                base = self.get_register(op)
+
+                        else:
+                            exp = op.split('*')
+                            if len(exp)>0:
+                                scale = int(exp[1])
+                                index = self.get_register(exp[0])
+
+                operands.append({'type':'mem','data':{'base':base,'index':index,'scale':scale,'disp':disp}})
+
+            else:
+                if self.get_register(operand) != {}:
+                    operands.append({'type':'reg','data':self.get_register(operand)})
+
+                else:
+                    operands.append({'type':'imd','data':int(operand,16)})
+        return operands
+
+    def get_register(self,reg):
+        for register in registers:
+            if reg == register['name']:
+                return register
+        return {}
+    def check_constant(self,constant):
+        try:
+            int(constant)
+            return True
+        except ValueError:
+            return False
+
+
 if __name__ == '__main__':
-    assembler = Assembler()
-    assembler.process()
-
-
+    test = ['mov rax,rbx',
+            'add rax,3',
+            'sub rax,[123]',
+            'mul rax,[rax+12]',
+            'add rax,[rax+rbx*4+12]',]
+    for t in test:
+        print('{}: '.format(t))
+        assembler = Assembler()
+        # nasm = input()
+        nasm = t
+        assembler.process(nasm)
+        del assembler
+        print('\n')
 
