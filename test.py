@@ -16,4 +16,11 @@
 
 
 
-print(2*3)
+# print(2*3)
+
+
+
+a = '0x5555551e'
+
+a = int(a,)
+print(a)
