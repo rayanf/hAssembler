@@ -72,7 +72,7 @@ registers = [
     {'name':'r15b','size':8,'code':0b1111},
 ]
 operators = [
-            {'name':'mov','operands':2,'opcode': 0b100010,'iopcode':0b1011},
+            {'name':'mov','operands':2,'opcode': 0b100010,'iopcode':0b110001000},
             {'name':'mov','operands':1,'opcode': 0b0},
             {'name':'add','operands':2,'opcode': 0b000000,'iopcode':0b100000000},
             {'name':'add','operands':1,'opcode': 0b0},
@@ -102,8 +102,10 @@ operators = [
             {'name':'and','operands':1,'opcode': 0b0},
             {'name':'not','operands':1,'opcode':0b111101,'rcode':0b010},
             {'name':'shl','operands':2,'opcode': 0b0,'iopcode':0b110000100},
+            
             {'name':'shl','operands':1,'opcode':0b110100,'rcode':0b100},
             {'name':'shr','operands':1,'opcode':0b110100,'rcode':0b101},
+            
             {'name':'shr','operands':2,'opcode': 0b0,'iopcode':0b110000101},
             {'name':'cmp','operands':2,'opcode': 0b001110,'iopcode':100000111},
             {'name':'test','operands':2,'opcode': 0b100001,'iopcode':0b111101000},
@@ -252,7 +254,6 @@ class Assembler:
     def debug(self):
         a = []
         print(a[0])
-
     def testing(self):
         print('rex: ' , self.instructions.rex)
         print('rex_w: ' , self.instructions.rex_w)
@@ -283,8 +284,6 @@ class Assembler:
         print(self.instructions.scale)
         print('disp:',end='')
         print(self.instructions.disp) 
-
-
     def set_size(self,operand,address):
         if address == 32:
             if operand == 8:
@@ -350,12 +349,12 @@ class Assembler:
             return 64
 
     def setDisp(self, val, size):
+        self.disp_len = size
         self.instructions.disp = [0x00] * (size // 8)
         for i in range(len(self.instructions.disp)):
 
             self.instructions.disp[i] = val & 0xFF
             val >>= 8
-        
 
         # print(self.instructions.disp)
     def disp_to_str(self):
@@ -364,7 +363,11 @@ class Assembler:
         else:
             res = ''
             for i,d in enumerate(self.instructions.disp):
-                res += str(hex(d))[2:]   
+                
+                if len(str(hex(d))[2:]) == 1:
+                    res += '0' + str(hex(d))[2:]
+                else:
+                    res += str(hex(d))[2:]   
 
             res = int(res,16)         
             return res
@@ -391,13 +394,16 @@ class Assembler:
             print('0'+str(hex(self.opcode)[2:]))
         else:
             print(str(hex(self.opcode)[2:]))
-
     
     def process_Unary_operand(self):
         if self.instructions.operands[0]['type'] == 'reg':
 
             self.instructions.opcode = self.instructions.operator['opcode']
-            self.instructions.d = 1
+            if self.instructions.operator['name'] == 'shl' or self.instructions.operator['name'] == 'shr':
+                self.instructions.d = 0
+            else:
+                self.instructions.d = 1
+
             self.set_size(self.instructions.operands[0]['data']['size'],False)
             self.instructions.reg = self.instructions.operator['rcode']
 
@@ -430,10 +436,12 @@ class Assembler:
             
             
             else:
+                # self.testing()
+                # self.instructions.d = 0
                 if self.instructions.rex != 0:
-                    result = (self.instructions.prefix[0] << 24 ) +(self.instructions.rex << (20))+(self.instructions.rex_w << (19))+(self.instructions.rex_r << (18))+(self.instructions.rex_x << (17))+(int(self.instructions.rex_b) << (16))+(self.instructions.opcode << 10) + (self.instructions.w << 9) + (self.instructions.d << 8) + (self.instructions.mod << 6) + (self.instructions.reg << 3) + int(self.instructions.rm)
+                    result = (self.instructions.prefix[0] << 24 ) +(self.instructions.rex << (20))+(self.instructions.rex_w << (19))+(self.instructions.rex_r << (18))+(self.instructions.rex_x << (17))+ (int(self.instructions.rex_b) << (16))+(self.instructions.opcode << 10) + (self.instructions.w << 8) + (self.instructions.d << 9) + (self.instructions.mod << 6) + (self.instructions.reg << 3) + int(self.instructions.rm)
                 else:
-                    result = (self.instructions.prefix[0] << 16) + (self.instructions.opcode << 10) + (self.instructions.w << 9) + (self.instructions.d << 8) + (self.instructions.mod << 6) + (self.instructions.reg << 3) + int(self.instructions.rm)
+                    result = (self.instructions.prefix[0] << 16) + (self.instructions.opcode << 10) + (self.instructions.w << 8) + (self.instructions.d << 9) + (self.instructions.mod << 6) + (self.instructions.reg << 3) + int(self.instructions.rm)
 
             # self.testing()
             print(str(hex(result)[2:]))
@@ -444,7 +452,10 @@ class Assembler:
 
             self.instructions.opcode = self.instructions.operator['opcode']
             self.instructions.reg = self.instructions.operator['rcode']
-            self.instructions.d = 1
+            if self.instructions.operator['name'] == 'shl' or self.instructions.operator['name'] == 'shr':
+                self.instructions.d = 0
+            else:
+                self.instructions.d = 1
             self.ebp = False
 
             disp = self.instructions.operands[0]['data']['disp']
@@ -453,7 +464,6 @@ class Assembler:
             scale = self.instructions.operands[0]['data']['scale']
             fake = False
             
-
 
             # disp
             if (disp == 0) and (base == {} or base['code']&0b111 != 0b101):
@@ -474,7 +484,7 @@ class Assembler:
                 fake = True
                 index = base.copy()
                 index['code'] &= 0b111
-                self.self.instructions.rm = self.instructionsv.base['code']
+                self.instructions.rm = base['code']
                 self.set_size(self.operand_size,self.address_size)
 
             # ebp
@@ -492,12 +502,13 @@ class Assembler:
                 fake = True
                 self.instructions.mod = 0b00
                 base = self.get_register('ebp')
-                self.setDisp(disp, 60)
+                # self.setDisp(disp, 60)
                 self.set_size(self.operand_size,self.address_size)
                 if index['code'] & 0b000 != 0:
                     self.index_new_reg = True
 
                 index['code'] &= 0b111
+                disp_len = 32
 
             # direct addressing [disp]
             elif index == {} and base == {}:
@@ -506,7 +517,7 @@ class Assembler:
                 base = self.get_register('ebp')
                 index = self.get_register('esp')
                 scale = 1
-                self.setDisp(disp, self.bit_len(disp))
+                # self.setDisp(disp, self.bit_len(disp))
                 self.set_size(self.operand_size,self.address_size)
 
             self.direct_addressing = False
@@ -550,11 +561,12 @@ class Assembler:
                     self.set_size(self.operand_size,self.address_size)
             
             prefix_len = 1
+
+
+            
             if len(self.instructions.prefix) == 0:
                 self.instructions.prefix.append(0x0)
-            # result = (self.instructions.rex << (20+prefix_len*8))+(self.instructions.rex_w << (19+prefix_len*8))+(self.instructions.rex_r << (18+prefix_len*8))+(self.instructions.rex_x << (17+prefix_len*8))+(int(self.instructions.rex_b) << (16+prefix_len*8))+(self.instructions.prefix[0] << 16) + (self.instructions.opcode << 10) + (self.instructions.w << 9) + (self.instructions.d << 8) + (self.instructions.mod << 6) + (self.instructions.reg << 3) + int(self.instructions.rm)
-            # result <<= 8
-           
+      
 
             if self.base_new_reg:
                 self.instructions.rex = 0b0100
@@ -564,37 +576,59 @@ class Assembler:
                 self.instructions.rex_x = 0b1
             
 
-            if not self.ebp:
-                disp_len = self.bit_len(disp)
-            # print(str(hex(self.instructions.prefix[0])))
-                if self.instructions.disp == 0:
-                    disp_len = 0
-                if self.instructions.operands[0]['data']['index'] != {} and self.instructions.operands[0]['data']['base'] == {}:
-                    disp_len = 32
-                # print('hah')
-            if self.instructions.rex == 0:
-                # print(self.disp_to_str())
-                result = ((self.instructions.prefix[0]<< disp_len + 24 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+  (self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + self.disp_to_str())
-            else:
-                result = ((self.instructions.prefix[0]<< disp_len + 32 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+ (self.instructions.rex_b << disp_len+24)+ (self.instructions.rex_x << disp_len+25)+ (self.instructions.rex_r << disp_len+26)+ (self.instructions.rex_w << disp_len+27)+ (self.instructions.rex << disp_len+28)+(self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + self.disp_to_str())
+            if self.instructions.operands[0]['data']['base'] != {} or self.instructions.operands[0]['data']['index'] != {}:
+                try:
+                    if self.instructions.operands[0]['data']['base']['size'] == 32:
+                        if self.disp_len == 16:
+                            disp_len = 32
+                except :
+                    if self.instructions.operands[0]['data']['index']['size'] == 32:
+                        if self.disp_len == 16:
+                            disp_len = 32
+
+
             
+            
+            try:
+                disp_len += 1
+                disp_len -= 1
+            except:
+                try:                        
+                    disp_len = self.disp_len
+                except:
+                    self.disp_len = 0
+                    disp_len = self.disp_len
+
+            if disp_len < self.disp_len:
+                disp_len = self.disp_len
+            # print(self.instructions.prefix)
+            # print(disp_len)
+            if not self.direct_addressing:
+                # return 0
+                if self.instructions.rex == 0:
+                # print(self.disp_to_str())
+                    result = ((self.instructions.prefix[0]<< disp_len + 24 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+  (self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + (self.disp_to_str()<< (disp_len-self.disp_len)))
+                else:
+                    # print('hah')
+                    result = (self.instructions.prefix[0]<< disp_len + 32 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+ (self.instructions.rex_b << disp_len+24)+ (self.instructions.rex_x << disp_len+25)+ (self.instructions.rex_r << disp_len+26)+ (self.instructions.rex_w << disp_len+27)+ (self.instructions.rex << disp_len+28)+(self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) +(self.disp_to_str()<< (disp_len-self.disp_len))
             if self.direct_addressing:
+                # return 0
                 if self.instructions.rex == 0:
                     # print(self.disp_to_str())
-                    result = ((self.instructions.prefix[0]<< disp_len + 24-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8) + self.disp_to_str())
+                    result = ((self.instructions.prefix[0]<< disp_len + 24-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8) + (self.disp_to_str() << (disp_len-self.disp_len)))
                 else:
-                    result = ((self.instructions.prefix[0]<< disp_len + 32-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24-8)+ (self.instructions.rex_x << disp_len+25-8)+ (self.instructions.rex_r << disp_len+26-8)+ (self.instructions.rex_w << disp_len+27-8)+ (self.instructions.rex << disp_len+28-8)+ self.disp_to_str())
+                    result = ((self.instructions.prefix[0]<< disp_len + 32-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24-8)+ (self.instructions.rex_x << disp_len+25-8)+ (self.instructions.rex_r << disp_len+26-8)+ (self.instructions.rex_w << disp_len+27-8)+ (self.instructions.rex << disp_len+28-8)+ (self.disp_to_str()<< (disp_len-self.disp_len)))
                 
 
             print(str(hex(result))[2:])     
-            # print(self.address_size)
-            # print(self.operand_size)
-        
+
         elif self.instructions.operands[0]['type'] == 'imd':
             # print(self.bit_len(self.instructions.operands[0]['data']))
             if self.instructions.operator['name'] == 'push':
                 opcode = 0b011010
                 imd = self.instructions.operands[0]['data']
+                self.setDisp(imd,self.bit_len(imd))
+
                 if self.bit_len(imd) == 8:
                     s = 1
                 else:
@@ -606,26 +640,10 @@ class Assembler:
                     prefix = 0b01010101
                 else:
                     prefix = 0b0
-                res += imd + (s << imd_len+1)+ (opcode << imd_len+2) + (prefix<< imd_len+8)
+                res += self.disp_to_str() + (s << imd_len+1)+ (opcode << imd_len+2) + (prefix<< imd_len+8)
 
                 print(str(hex(res))[2:])
 
-            # elif self.instructions.operator['name'] == 'jmp':
-            #     if self.bit_len(self.instructions.operands[0]['data']) == 8:
-            #         res = 0b11101011
-            #         res = (res<< 8)
-            #         imd = self.instructions.operands[0]['data']
-            #         self.setDisp(imd,8)
-            #         res += self.disp_to_str()
-            #         print(str(hex(res))[2:])
-
-            #     else:
-            #         res = 0b11101001
-            #         res = (res<< 32)
-            #         imd = self.instructions.operands[0]['data']
-            #         self.setDisp(imd,32)
-            #         res += self.disp_to_str()
-            #         print(str(hex(res))[2:])
 
 
             elif self.instructions.operator['name'] == 'ret':
@@ -638,16 +656,22 @@ class Assembler:
 
 
     def process_Binary_operand(self):
+        # return 0
         # print(self.instructions.operands)
         # register -- register
         if (self.instructions.operands[0]['type'] == 'reg') and (self.instructions.operands[1]['type'] == 'reg'):
 
+            # if self.instructions.operands[1]['data']['code'] > 7:
+                # self.debug()
+            # print(self.instructions.operands[0])
             if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
                 self.instructions.d = 1
                 self.instructions.operands[0], self.instructions.operands[1] = self.instructions.operands[1], self.instructions.operands[0]
             else:
                 self.instructions.d = 0
-            
+            if self.instructions.operator['name'] == 'xchg':
+                self.instructions.d = 1
+
             self.instructions.opcode = self.instructions.operator['opcode']
             self.instructions.mod = 0b11
             self.instructions.rm = self.instructions.operands[0]['data']['code'] % 8
@@ -665,30 +689,30 @@ class Assembler:
                 self.instructions.rex = 0b0100
                 if len(self.instructions.prefix) == 0:
                     self.instructions.prefix.append(0b0) 
-                    result = 0
-                    if self.instructions.operator['name'] != 'bsr' and self.instructions.operator['name'] != 'bsf':  
-                        if self.instructions.operator['name'] == 'xadd' or self.instructions.operator['name'] == 'imul':
-                            result += (self.instructions.prefix[0] << 24+8)+ (self.instructions.rex << 20+8)+ (self.instructions.rex_w << 19+8)+ (self.instructions.rex_r << 18+8)+ (self.instructions.rex_x << 17+8)+ (self.instructions.rex_b << 16+8)+ (self.instructions.opcode << 10)+ (self.instructions.d << 9)+ (self.instructions.w << 8)+ (self.instructions.mod << 6)+ (self.instructions.reg << 3)+ (self.instructions.rm << 0)                            
-                        else:    
-                            result += (self.instructions.prefix[0] << 24)+ (self.instructions.rex << 20)+ (self.instructions.rex_w << 19)+ (self.instructions.rex_r << 18)+ (self.instructions.rex_x << 17)+ (self.instructions.rex_b << 16)+ (self.instructions.opcode << 10)+ (self.instructions.d << 9)+ (self.instructions.w << 8)+ (self.instructions.mod << 6)+ (self.instructions.reg << 3)+ (self.instructions.rm << 0)
+                result = 0
+                if self.instructions.operator['name'] != 'bsr' and self.instructions.operator['name'] != 'bsf':  
+                    if self.instructions.operator['name'] == 'xadd' or self.instructions.operator['name'] == 'imul':
+                        result += (self.instructions.prefix[0] << 24+8)+ (self.instructions.rex << 20+8)+ (self.instructions.rex_w << 19+8)+ (self.instructions.rex_r << 18+8)+ (self.instructions.rex_x << 17+8)+ (self.instructions.rex_b << 16+8)+ (self.instructions.opcode << 10)+ (self.instructions.d << 9)+ (self.instructions.w << 8)+ (self.instructions.mod << 6)+ (self.instructions.reg << 3)+ (self.instructions.rm << 0)                            
+                    else:    
+                        result += (self.instructions.prefix[0] << 24)+ (self.instructions.rex << 20)+ (self.instructions.rex_w << 19)+ (self.instructions.rex_r << 18)+ (self.instructions.rex_x << 17)+ (self.instructions.rex_b << 16)+ (self.instructions.opcode << 10)+ (self.instructions.d << 9)+ (self.instructions.w << 8)+ (self.instructions.mod << 6)+ (self.instructions.reg << 3)+ (self.instructions.rm << 0)
+                else:
+                    if self.instructions.operator['name'] == 'bsr':
+                        self.instructions.w = 1
                     else:
-                        if self.instructions.operator['name'] == 'bsr':
-                            self.instructions.d = 1
-                        else:
-                            self.instructions.d = 0
-
                         self.instructions.w = 0
-                        # print('hah')
-                        # print(self.instructions.reg)
-                        result = (self.instructions.prefix[0] <<( 24+8))+ (self.instructions.rex << (20+8))+ (self.instructions.rex_w << (19+8)) + (self.instructions.rex_r << (18+8))+ (self.instructions.rex_x << (17+8))+ (self.instructions.rex_b << (16+8))+ (self.instructions.opcode << 10)+ (self.instructions.d << 9)+ (self.instructions.w << 8)+ (self.instructions.mod << 6)+ (self.instructions.reg << 3)+ (self.instructions.rm)
-                    print(str(hex(result))[2:])
+
+                    self.instructions.d = 0
+                    # print('hah')
+                    # print(self.instructions.reg)
+                    result = (self.instructions.prefix[0] <<( 24+8))+ (self.instructions.rex << (20+8))+ (self.instructions.rex_w << (19+8)) + (self.instructions.rex_r << (18+8))+ (self.instructions.rex_x << (17+8))+ (self.instructions.rex_b << (16+8))+ (self.instructions.opcode << 10)+ (self.instructions.d << 9)+ (self.instructions.w << 8)+ (self.instructions.mod << 6)+ (self.instructions.reg << 3)+ (self.instructions.rm)
+                print(str(hex(result))[2:])
 
             else:
                 if len(self.instructions.prefix) == 0:
                     self.instructions.prefix.append(0b0) 
                 
                 result = 0
-                if self.instructions.operator['name'] == 'xadd' or self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsr' or self.instructions.operator['name'] == 'bsf':
+                if self.instructions.operator['name'] == 'xadd' or self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsr':
                     if self.instructions.operator['name'] == 'bsr':
                         self.instructions.d = 1
                     else:
@@ -702,17 +726,26 @@ class Assembler:
     
                     print(str(hex(result))[2:])
 
+            # self.debug()
         if (self.instructions.operands[0]['type'] == 'reg') and (self.instructions.operands[1]['type'] == 'mem'):
+            # self.debug()
             if self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
                 self.instructions.d = 0
             else:
                 self.instructions.d = 1
-    
+            # self.set_size(self.instructions.operands[0]['data']['size'],)    
             self.instructions.opcode = self.instructions.operator['opcode']
             self.instructions.reg = self.instructions.operands[0]['data']['code']%8
             self.instructions.rex_r = self.instructions.operands[0]['data']['code']//8
             
-            self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['size'])
+
+            try:
+                self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['data']['base']['size'])
+            except:
+                try:
+                    self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['data']['index']['size'])
+                except:
+                    self.set_size(self.instructions.operands[0]['data']['size'],self.bit_len(self.instructions.operands[1]['data']['disp']))
 
             self.ebp = False
 
@@ -739,7 +772,7 @@ class Assembler:
                 fake = True
                 index = base.copy()
                 index['code'] &= 0b111
-                self.self.instructions.rm = self.instructionsv.base['code']
+                self.instructions.rm = base['code']
                 self.set_size(self.operand_size,self.address_size)
 
             # ebp
@@ -750,19 +783,19 @@ class Assembler:
                 self.instructions.mod = 0b01
                 disp_len = 8
 
-
             self.index_new_reg = 0
             # scale
             if index != {} and base == {}:
+                # self.debug()
                 fake = True
                 self.instructions.mod = 0b00
                 base = self.get_register('ebp')
-                self.setDisp(disp, 60)
+                # self.setDisp(disp, 60)
                 self.set_size(self.operand_size,self.address_size)
-                if index['code'] & 0b000 != 0:
+                if index['code'] & 0b1000 != 0:
                     self.index_new_reg = True
-
                 index['code'] &= 0b111
+                disp_len = 32
 
             # direct addressing [disp]
             elif index == {} and base == {}:
@@ -771,8 +804,9 @@ class Assembler:
                 base = self.get_register('ebp')
                 index = self.get_register('esp')
                 scale = 1
-                self.setDisp(disp, self.bit_len(disp))
+                # self.setDisp(disp, self.bit_len(disp))
                 self.set_size(self.operand_size,self.address_size)
+                disp_len = 32
 
             self.direct_addressing = False
             self.base_new_reg = False
@@ -792,6 +826,9 @@ class Assembler:
                     if self.instructions.operands[1]['data']['base']['code'] & 0b1000 != 0:
                         self.base_new_reg = True
                         base['code'] &= 0b111
+                except:
+                    pass
+                try:
                     if self.instructions.operands[1]['data']['index']['code'] & 0b1000 != 0:
                         self.index_new_reg = True
                         index['code'] &= 0b111
@@ -814,12 +851,13 @@ class Assembler:
                 if not fake:
                     self.set_size(self.operand_size,self.address_size)
             
+            # if self.instructions.operands[1]['data']['index']['size'] == 64:
+            #    self.debug()
+
             prefix_len = 1
             if len(self.instructions.prefix) == 0:
                 self.instructions.prefix.append(0x0)
-            # result = (self.instructions.rex << (20+prefix_len*8))+(self.instructions.rex_w << (19+prefix_len*8))+(self.instructions.rex_r << (18+prefix_len*8))+(self.instructions.rex_x << (17+prefix_len*8))+(int(self.instructions.rex_b) << (16+prefix_len*8))+(self.instructions.prefix[0] << 16) + (self.instructions.opcode << 10) + (self.instructions.w << 9) + (self.instructions.d << 8) + (self.instructions.mod << 6) + (self.instructions.reg << 3) + int(self.instructions.rm)
-            # result <<= 8
-           
+   
 
             if self.base_new_reg:
                 self.instructions.rex = 0b0100
@@ -829,69 +867,108 @@ class Assembler:
                 self.instructions.rex = 0b0100
                 self.instructions.rex_x = 0b1
             
+            
+            
+            try:
+                disp_len += 1
+                disp_len -= 1
+            except:
+                try:                        
+                    disp_len = self.disp_len
+                except:
+                    self.disp_len = 0
+                    disp_len = self.disp_len
+            try:
+                self.disp_len += 1
+                self.disp_len -= 1
+            except:
+                self.disp_len = 0
+                
+            if disp_len < self.disp_len:
+                disp_len = self.disp_len
 
-            if not self.ebp:
-                disp_len = self.bit_len(disp)
-            # print(str(hex(self.instructions.prefix[1])))
-                if self.instructions.disp == 0:
-                    disp_len = 0
-                if self.instructions.operands[1]['data']['index'] != {} and self.instructions.operands[1]['data']['base'] == {}:
-                    disp_len = 32
+
                 # print('hah')
-                if self.instructions.operator['name'] == 'bsf':
-                    self.instructions.w = 0b0
-                elif self.instructions.operator['name'] == 'bsr':
-                    self.instructions.w = 0b1
-
-            if self.instructions.rex == 0:
-                if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
-                # print(self.disp_to_str())
-                    result = ((self.instructions.prefix[0]<< disp_len + 24+8 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+  (self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + self.disp_to_str())
+            if self.instructions.operator['name'] == 'bsf':
+                self.instructions.w = 0b0
+            elif self.instructions.operator['name'] == 'bsr':
+                self.instructions.w = 0b1
+            
+            # self.testing()
+            if not self.direct_addressing:
+                if self.instructions.rex == 0:
+                    if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
+                    # print(self.disp_to_str())
+                        result = ((self.instructions.prefix[0]<< disp_len + 24+8 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+  (self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + (self.disp_to_str()<< disp_len-self.disp_len))
+                    else:
+                        result = ((self.instructions.prefix[0]<< disp_len + 24 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+  (self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + (self.disp_to_str()<< disp_len-self.disp_len))
                 else:
-                    result = ((self.instructions.prefix[0]<< disp_len + 24 )+(self.instructions.rm << disp_len+8)+(self.instructions.reg << disp_len+11)+(self.instructions.mod << disp_len+14)+(self.instructions.w << disp_len+16)+(self.instructions.d << disp_len+17)+ (self.instructions.opcode << disp_len+18)+  (self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + self.disp_to_str())
-            else:
-                if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
-                    result = ((self.instructions.prefix[0]<< (disp_len + 32 +8))+(self.instructions.rm << (disp_len+8))+(self.instructions.reg << (disp_len+11))+(self.instructions.mod << (disp_len+14))+(self.instructions.w << (disp_len+16))+(self.instructions.d << (disp_len+17))+ (self.instructions.opcode << (disp_len+18))+ (self.instructions.rex_b << (disp_len+24+8))+ (self.instructions.rex_x <<( disp_len+25+8))+ (self.instructions.rex_r << (disp_len+26+8))+ (self.instructions.rex_w << (disp_len+27+8))+ (self.instructions.rex << (disp_len+28+8))+(self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + self.disp_to_str())                
-                else:
-                    result = ((self.instructions.prefix[0]<< (disp_len + 32) )+(self.instructions.rm <<( disp_len+8))+(self.instructions.reg << (disp_len+11))+(self.instructions.mod << (disp_len+14))+(self.instructions.w << (disp_len+16))+(self.instructions.d << (disp_len+17))+ (self.instructions.opcode << disp_len+18)+ (self.instructions.rex_b << disp_len+24)+ (self.instructions.rex_x << disp_len+25)+ (self.instructions.rex_r << disp_len+26)+ (self.instructions.rex_w << disp_len+27)+ (self.instructions.rex << disp_len+28)+(self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + self.disp_to_str())
+                    if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
+                        result = ((self.instructions.prefix[0]<< (disp_len + 32 +8))+(self.instructions.rm << (disp_len+8))+(self.instructions.reg << (disp_len+11))+(self.instructions.mod << (disp_len+14))+(self.instructions.w << (disp_len+16))+(self.instructions.d << (disp_len+17))+ (self.instructions.opcode << (disp_len+18))+ (self.instructions.rex_b << (disp_len+24+8))+ (self.instructions.rex_x <<( disp_len+25+8))+ (self.instructions.rex_r << (disp_len+26+8))+ (self.instructions.rex_w << (disp_len+27+8))+ (self.instructions.rex << (disp_len+28+8))+(self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + (self.disp_to_str()<< disp_len-self.disp_len))                
+                    else:
+                        result = ((self.instructions.prefix[0]<< (disp_len + 32) )+(self.instructions.rm <<( disp_len+8))+(self.instructions.reg << (disp_len+11))+(self.instructions.mod << (disp_len+14))+(self.instructions.w << (disp_len+16))+(self.instructions.d << (disp_len+17))+ (self.instructions.opcode << disp_len+18)+ (self.instructions.rex_b << disp_len+24)+ (self.instructions.rex_x << disp_len+25)+ (self.instructions.rex_r << disp_len+26)+ (self.instructions.rex_w << disp_len+27)+ (self.instructions.rex << disp_len+28)+(self.instructions.scale << (disp_len +6)) + (self.instructions.index << (disp_len+3)) + (self.instructions.base << disp_len) + (self.disp_to_str()<< disp_len-self.disp_len))
 
+            # return 0
             if self.direct_addressing:
                 if self.instructions.rex == 0:
                     if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
-                        result = ((self.instructions.prefix[0]<< disp_len + 24 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8) + self.disp_to_str())
+                        result = ((self.instructions.prefix[0]<< disp_len + 24 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8) + (self.disp_to_str()<< disp_len-self.disp_len))
                     else:                        
-                        result = ((self.instructions.prefix[0]<< disp_len + 24-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8) + self.disp_to_str())
+                        result = ((self.instructions.prefix[0]<< disp_len + 24-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8) + (self.disp_to_str()<< disp_len-self.disp_len))
                 else:
                     if self.instructions.operator['name'] == 'imul' or self.instructions.operator['name'] == 'bsf' or self.instructions.operator['name'] == 'bsr':
-                        result = ((self.instructions.prefix[0]<< disp_len + 32 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24)+ (self.instructions.rex_x << disp_len+25)+ (self.instructions.rex_r << disp_len+26)+ (self.instructions.rex_w << disp_len+27)+ (self.instructions.rex << disp_len+28)+ self.disp_to_str())
+                        result = ((self.instructions.prefix[0]<< disp_len + 32 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24)+ (self.instructions.rex_x << disp_len+25)+ (self.instructions.rex_r << disp_len+26)+ (self.instructions.rex_w << disp_len+27)+ (self.instructions.rex << disp_len+28)+ (self.disp_to_str()<< disp_len-self.disp_len))
                     else:
-                        result = ((self.instructions.prefix[0]<< disp_len + 32-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24-8)+ (self.instructions.rex_x << disp_len+25-8)+ (self.instructions.rex_r << disp_len+26-8)+ (self.instructions.rex_w << disp_len+27-8)+ (self.instructions.rex << disp_len+28-8)+ self.disp_to_str())
+                        result = ((self.instructions.prefix[0]<< disp_len + 32-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24-8)+ (self.instructions.rex_x << disp_len+25-8)+ (self.instructions.rex_r << disp_len+26-8)+ (self.instructions.rex_w << disp_len+27-8)+ (self.instructions.rex << disp_len+28-8)+ (self.disp_to_str()<< disp_len-self.disp_len))
 
+            # self.debug()
+            # self.testing()
             print(str(hex(result))[2:])
 
         if (self.instructions.operands[0]['type'] == 'reg') and (self.instructions.operands[1]['type'] == 'imd'):
+            # self.debug()
+            if self.instructions.operands[1]['data'] == 1 and self.instructions.operator['name'] == 'shr':
+                self.instructions.operator = {'name':'shr','operands':1,'opcode':0b110100,'rcode':0b101}
+                self.process_Unary_operand()
+                return 0
+
             self.instructions.opcode = self.instructions.operator['iopcode']>>3
-            if self.instructions.operands[0]['data']['size']  > self.bit_len(self.instructions.operands[1]['data']):
-                self.instructions.d = 1
+            # if self.instructions.operands[0]['data']['size']  > self.bit_len(self.instructions.operands[1]['data']):
+            #     self.instructions.d = 0
+            # else:
+            #     self.instructions.d = 0
+
+            if self.instructions.operands[0]['data']['size'] >= 16:
+                if self.bit_len(self.instructions.operands[1]['data']) == 8:
+                    self.instructions.d = 0
+                else:
+                    self.instructions.d = 0
             else:
                 self.instructions.d = 0
+            # if self.instructions.operator['name'] == 'shr':
+                # self.instructions.d = 1
 
+            # if self.instructions.operands[0]['data']['code'] > 7:
+                # self.debug()
             self.instructions.mod = 0b11
             self.instructions.reg = self.instructions.operator['iopcode']%8
             self.instructions.rm = self.instructions.operands[0]['data']['code']%8
             self.instructions.rex_b = self.instructions.operands[0]['data']['code']//8
             self.set_size(self.instructions.operands[0]['data']['size'],0)
-
+            
             if self.instructions.rex_b != 0:
                 self.instructions.rex = 0b0100
             
             if len(self.instructions.prefix)==0:
                 self.instructions.prefix.append(0)
             lenn = self.bit_len(self.instructions.operands[1]['data'])
+            self.setDisp(self.instructions.operands[1]['data'],lenn)
+
+            # self.testing()
             if self.instructions.rex == 0:
-                result = ((self.instructions.prefix[0]<< lenn+16 )+(self.instructions.rm << lenn)+(self.instructions.reg << lenn+3)+(self.instructions.mod << lenn+6)+(self.instructions.w << lenn+8)+(self.instructions.d << lenn+9)+ (self.instructions.opcode << lenn+10)+  self.instructions.operands[1]['data'])
+                result = ((self.instructions.prefix[0]<< lenn+16 )+(self.instructions.rm << lenn)+(self.instructions.reg << lenn+3)+(self.instructions.mod << lenn+6)+(self.instructions.w << lenn+8)+(self.instructions.d << lenn+9)+ (self.instructions.opcode << lenn+10)+  self.disp_to_str())
             else:
-                result = ((self.instructions.prefix[0]<< (lenn+24) )+(self.instructions.rm << lenn)+(self.instructions.reg << (lenn+3))+(self.instructions.mod << (lenn+6))+(self.instructions.w << (lenn+8))+(self.instructions.d << (lenn+9))+ (self.instructions.opcode << (lenn+10))+  self.instructions.operands[1]['data'])+ (self.instructions.rex_b << (lenn+16)) + (self.instructions.rex_x << (lenn+17)) + (self.instructions.rex_r << (lenn+18)) + (self.instructions.rex_w << (lenn+19)) +(self.instructions.rex << (lenn+20))
+                result = ((self.instructions.prefix[0]<< (lenn+24) )+(self.instructions.rm << lenn)+(self.instructions.reg << (lenn+3))+(self.instructions.mod << (lenn+6))+(self.instructions.w << (lenn+8))+(self.instructions.d << (lenn+9))+ (self.instructions.opcode << (lenn+10))+  self.disp_to_str())+ (self.instructions.rex_b << (lenn+16)) + (self.instructions.rex_x << (lenn+17)) + (self.instructions.rex_r << (lenn+18)) + (self.instructions.rex_w << (lenn+19)) +(self.instructions.rex << (lenn+20))
 
             print(str(hex(result))[2:])
             # self.testing()
@@ -906,7 +983,14 @@ class Assembler:
             self.instructions.reg = self.instructions.operands[0]['data']['code']%8
             self.instructions.rex_r = self.instructions.operands[0]['data']['code']//8
             
-            self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['size'])
+            # self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['size'])
+            try:
+                self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['data']['base']['size'])
+            except:
+                try:
+                    self.set_size(self.instructions.operands[0]['data']['size'],self.instructions.operands[1]['data']['index']['size'])
+                except:
+                    self.set_size(self.instructions.operands[0]['data']['size'],self.bit_len(self.instructions.operands[1]['data']['disp']))
 
             
             self.ebp = False
@@ -1053,6 +1137,7 @@ class Assembler:
                     result = ((self.instructions.prefix[0]<< disp_len + 32-8 )+(self.instructions.rm << disp_len)+(self.instructions.reg << disp_len+11-8)+(self.instructions.mod << disp_len+14-8)+(self.instructions.w << disp_len+16-8)+(self.instructions.d << disp_len+17-8)+ (self.instructions.opcode << disp_len+18-8)+ (self.instructions.rex_b << disp_len+24-8)+ (self.instructions.rex_x << disp_len+25-8)+ (self.instructions.rex_r << disp_len+26-8)+ (self.instructions.rex_w << disp_len+27-8)+ (self.instructions.rex << disp_len+28-8)+ self.disp_to_str())
 
             print(str(hex(result))[2:])
+        
         if self.instructions.operands[0]['type'] == 'mem' and self.instructions.operands[1]['type'] == 'imd':
             # self.debug()
             pass
@@ -1082,6 +1167,7 @@ class Assembler:
         # self.testing()
 
 if __name__ == '__main__':
+    frominput = 1
     test1 = ['mov rax,rbx',
             'add rax,3',
             'sub rax,[123]',
@@ -1158,15 +1244,29 @@ if __name__ == '__main__':
     test14 = ['add QWORD PTR [rax],rbx',
               'add QWORD PTR [rax],r8',
     ]
-    test15=['bsf rax,rbx',]
-    # for t in test15:
-    #     print(t)
-    #     assembler = Assembler()
-    #     assembler.process(t)
-    #     print('#####################')
+    test15=['dec WORD PTR [0x1234567]',
+            'dec WORD PTR [0x133]',
+            'dec WORD PTR [0x12]',
+            'dec WORD PTR [0x1]',
+            'dec WORD PTR [0x12301]',
+    ] 
 
-    assembler = Assembler()
-    nasm = input()
-    assembler.process(nasm)
+    test16 = ['bsf rax,rbx',
+              'bsf rax,r8',
+              'bsf eax,r9d',
+              'bsf ax,r9w',
+    
+    
+    ]
+    if not frominput:
+        for t in test16:
+            print(t)
+            assembler = Assembler()
+            assembler.process(t)
+            print('#####################')
+    else:
+        assembler = Assembler()
+        nasm = input()
+        assembler.process(nasm)
 
 
